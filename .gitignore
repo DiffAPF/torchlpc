@@ -4,3 +4,5 @@
 *.nbi
 build/
 *.egg*
+.idea/
+.DS_Store
