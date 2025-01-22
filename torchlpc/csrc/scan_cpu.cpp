@@ -66,7 +66,7 @@ at::Tensor scan_cpu_wrapper(const at::Tensor &input, const at::Tensor &initials,
 
 TORCH_LIBRARY(torchlpc, m)
 {
-    m.def("torchlpc::scan_cpu(Tensor input, Tensor initials, Tensor weights) -> Tensor", &scan_cpu<float>);
+    m.def("torchlpc::scan_cpu(Tensor input, Tensor initials, Tensor weights) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(torchlpc, CPU, m)
