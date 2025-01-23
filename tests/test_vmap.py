@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch.func import jacfwd
 import pytest
 from torchlpc.core import LPC
-from torchlpc.recurrence import RecurrenceCUDA
+from torchlpc.recurrence import Recurrence
 
 
 from .test_grad import create_test_inputs
@@ -48,14 +48,25 @@ def test_vmap(device: str):
         assert torch.allclose(jac, arg.grad)
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
-def test_cuda_parallel_scan_vmap():
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA not available"
+            ),
+        ),
+    ],
+)
+def test_parallel_scan_vmap(device: str):
     batch_size = 3
     samples = 255
-    x = torch.randn(batch_size, samples, dtype=torch.double, device="cuda")
-    A = torch.rand(batch_size, samples, dtype=torch.double, device="cuda") * 2 - 1
-    zi = torch.randn(batch_size, dtype=torch.double, device="cuda")
-    y = torch.randn(batch_size, samples, dtype=torch.double, device="cuda")
+    x = torch.randn(batch_size, samples, dtype=torch.double, device=device)
+    A = torch.rand(batch_size, samples, dtype=torch.double, device=device) * 2 - 1
+    zi = torch.randn(batch_size, dtype=torch.double, device=device)
+    y = torch.randn(batch_size, samples, dtype=torch.double, device=device)
 
     A.requires_grad = True
     x.requires_grad = True
@@ -64,7 +75,7 @@ def test_cuda_parallel_scan_vmap():
     args = (x, A, zi)
 
     def func(x, A, zi):
-        return F.mse_loss(RecurrenceCUDA.apply(A, x, zi), y)
+        return F.mse_loss(Recurrence.apply(A, x, zi), y)
 
     jacs = jacfwd(func, argnums=tuple(range(len(args))))(*args)
 

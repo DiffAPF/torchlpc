@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch.autograd.gradcheck import gradcheck, gradgradcheck
 from torchlpc.core import LPC
-from torchlpc.recurrence import RecurrenceCUDA
+from torchlpc.recurrence import Recurrence
 
 
 def get_random_biquads(cmplx=False):
@@ -123,21 +123,33 @@ def test_float64_vs_32_cuda():
     "zi_requires_grad",
     [True, False],
 )
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
-def test_cuda_parallel_scan(
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA not available"
+            ),
+        ),
+    ],
+)
+def test_parallel_scan(
     x_requires_grad: bool,
     a_requires_grad: bool,
     zi_requires_grad: bool,
+    device: str,
 ):
     batch_size = 2
     samples = 123
-    x = torch.randn(batch_size, samples, dtype=torch.double, device="cuda")
-    A = torch.rand(batch_size, samples, dtype=torch.double, device="cuda") * 2 - 1
-    zi = torch.randn(batch_size, dtype=torch.double, device="cuda")
+    x = torch.randn(batch_size, samples, dtype=torch.double, device=device)
+    A = torch.rand(batch_size, samples, dtype=torch.double, device=device) * 2 - 1
+    zi = torch.randn(batch_size, dtype=torch.double, device=device)
 
     A.requires_grad = a_requires_grad
     x.requires_grad = x_requires_grad
     zi.requires_grad = zi_requires_grad
 
-    assert gradcheck(RecurrenceCUDA.apply, (A, x, zi), check_forward_ad=True)
-    assert gradgradcheck(RecurrenceCUDA.apply, (A, x, zi))
+    assert gradcheck(Recurrence.apply, (A, x, zi), check_forward_ad=True)
+    assert gradgradcheck(Recurrence.apply, (A, x, zi))

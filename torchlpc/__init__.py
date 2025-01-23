@@ -2,16 +2,22 @@ import torch
 from typing import Optional
 from pathlib import Path
 
+so_files = list(Path(__file__).parent.glob("_C*.so"))
+# assert len(so_files) == 1, f"Expected one _C*.so file, found {len(so_files)}"
+if len(so_files) == 1:
+    torch.ops.load_library(so_files[0])
+    EXTENSION_LOADED = True
+elif len(so_files) > 1:
+    raise ValueError(f"Expected one _C*.so file, found {len(so_files)}")
+else:
+    EXTENSION_LOADED = False
+
 from .core import LPC
-from .parallel_scan import WARPSIZE
-from .recurrence import RecurrenceCUDA
+
+# from .parallel_scan import WARPSIZE
+from .recurrence import Recurrence
 
 __all__ = ["sample_wise_lpc"]
-
-
-so_files = list(Path(__file__).parent.glob("_C*.so"))
-assert len(so_files) == 1, f"Expected one _C*.so file, found {len(so_files)}"
-torch.ops.load_library(so_files[0])
 
 
 def sample_wise_lpc(
@@ -43,7 +49,9 @@ def sample_wise_lpc(
     else:
         assert zi.shape == (B, order)
 
-    if order == 1 and x.is_cuda and B * WARPSIZE < T:
-        return RecurrenceCUDA.apply(-a.squeeze(2), x, zi.squeeze(1))
+    # if order == 1 and x.is_cuda and B * WARPSIZE < T:
+    #     return RecurrenceCUDA.apply(-a.squeeze(2), x, zi.squeeze(1))
+    if order == 1:
+        return Recurrence.apply(-a.squeeze(2), x, zi.squeeze(1))
 
     return LPC.apply(x, a, zi)
