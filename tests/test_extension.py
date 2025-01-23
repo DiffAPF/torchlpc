@@ -30,7 +30,6 @@ def test_scan_cpu_equiv(samples: int, cmplx: bool):
             zi.cpu().unsqueeze(1).numpy(),
         )
     )
-    ext_y = torch.empty_like(x)
-    torch.ops.torchlpc.scan_cpu(x, A, zi, ext_y)
+    ext_y = torch.ops.torchlpc.scan_cpu(x, A, zi)
 
     assert torch.allclose(numba_y, ext_y)

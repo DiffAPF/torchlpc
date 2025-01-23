@@ -53,20 +53,23 @@ void scan_cpu(const at::Tensor &input, const at::Tensor &weights, const at::Tens
                    { return a.second; });
 }
 
-void scan_cpu_wrapper(const at::Tensor &input, const at::Tensor &weights, const at::Tensor &initials, at::Tensor &output)
+at::Tensor scan_cpu_wrapper(const at::Tensor &input, const at::Tensor &weights, const at::Tensor &initials)
 {
     TORCH_CHECK(input.is_floating_point() || input.is_complex(), "Input must be floating point or complex");
     TORCH_CHECK(initials.scalar_type() == input.scalar_type(), "Initials must have the same scalar type as input");
     TORCH_CHECK(weights.scalar_type() == input.scalar_type(), "Weights must have the same scalar type as input");
-    TORCH_CHECK(output.scalar_type() == input.scalar_type(), "Output must have the same scalar type as input");
+    // TORCH_CHECK(output.scalar_type() == input.scalar_type(), "Output must have the same scalar type as input");
+
+    auto output = at::empty_like(input);
 
     AT_DISPATCH_FLOATING_AND_COMPLEX_TYPES(input.scalar_type(), "scan_cpu", [&]
                                            { scan_cpu<scalar_t>(input, weights, initials, output); });
+    return output;
 }
 
 TORCH_LIBRARY(torchlpc, m)
 {
-    m.def("torchlpc::scan_cpu(Tensor a, Tensor b, Tensor c, Tensor(a!) out) -> ()");
+    m.def("torchlpc::scan_cpu(Tensor a, Tensor b, Tensor c) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(torchlpc, CPU, m)
