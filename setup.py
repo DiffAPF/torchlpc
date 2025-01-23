@@ -2,7 +2,7 @@ import setuptools
 from torch.utils import cpp_extension
 
 NAME = "torchlpc"
-VERSION = "0.6"
+VERSION = "0.7.dev"
 MAINTAINER = "Chin-Yun Yu"
 EMAIL = "chin-yun.yu@qmul.ac.uk"
 
@@ -27,12 +27,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     ext_modules=[
-        cpp_extension.CppExtension("torchlpc", ["torchlpc/csrc/scan_cpu.cpp"])
+        cpp_extension.CppExtension("torchlpc._C", ["torchlpc/csrc/scan_cpu.cpp"])
     ],
     cmdclass={"build_ext": cpp_extension.BuildExtension},
-    # include_dirs=[
-    #     "/Library/Developer/CommandLineTools/usr/lib/clang/16/include",
-    #     "/Library/Developer/CommandLineTools/usr/include",
-    #     "/Library/Developer/CommandLineTools/SDKs/MacOSX15.2.sdk/usr/include",
-    # ],
 )
