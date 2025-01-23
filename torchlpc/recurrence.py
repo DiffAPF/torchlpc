@@ -4,10 +4,11 @@ from torch.autograd import Function
 from numba import cuda
 from typing import Tuple, Optional, Any, List
 
-from .parallel_scan import compute_linear_recurrence
+from .parallel_scan import compute_linear_recurrence, WARPSIZE
+from .core import lpc_cuda, lpc_np
 
 
-class RecurrenceCUDA(Function):
+class Recurrence(Function):
     @staticmethod
     def forward(
         decay: torch.Tensor,
@@ -15,15 +16,32 @@ class RecurrenceCUDA(Function):
         initial_state: torch.Tensor,
     ) -> torch.Tensor:
         n_dims, n_steps = decay.shape
-        out = torch.empty_like(impulse)
-        compute_linear_recurrence(
-            cuda.as_cuda_array(decay.detach()),
-            cuda.as_cuda_array(impulse.detach()),
-            cuda.as_cuda_array(initial_state.detach()),
-            cuda.as_cuda_array(out),
-            n_dims,
-            n_steps,
-        )
+        if decay.is_cuda:
+            if n_dims * WARPSIZE < n_steps:
+                out = torch.empty_like(impulse)
+                compute_linear_recurrence(
+                    cuda.as_cuda_array(decay.detach()),
+                    cuda.as_cuda_array(impulse.detach()),
+                    cuda.as_cuda_array(initial_state.detach()),
+                    cuda.as_cuda_array(out),
+                    n_dims,
+                    n_steps,
+                )
+            else:
+                out = lpc_cuda(impulse, -decay.unsqueeze(2), initial_state.unsqueeze(1))
+        else:
+            num_threads = torch.get_num_threads()
+            # This is just a rough estimation of the computational cost
+            if min(n_dims, num_threads) < num_threads / 3:
+                out = torch.ops.torchlpc.scan_cpu(impulse, decay, initial_state)
+            else:
+                out = torch.from_numpy(
+                    lpc_np(
+                        impulse.detach().numpy(),
+                        -decay.unsqueeze(2).detach().numpy(),
+                        initial_state.unsqueeze(1).detach().numpy(),
+                    )
+                )
         return out
 
     @staticmethod
@@ -48,7 +66,7 @@ class RecurrenceCUDA(Function):
             padded_decay = padded_decay[:, 1:]
 
         init = padded_grad_out.new_zeros(n_dims)
-        flipped_grad_impulse = RecurrenceCUDA.apply(
+        flipped_grad_impulse = Recurrence.apply(
             padded_decay.flip(1).conj_physical(),
             padded_grad_out.flip(1),
             init,
@@ -91,7 +109,7 @@ class RecurrenceCUDA(Function):
             fwd_decay = concat_out * grad_decay
             fwd_impulse = fwd_impulse + fwd_decay
 
-        return RecurrenceCUDA.apply(decay, fwd_impulse, fwd_initial_state)
+        return Recurrence.apply(decay, fwd_impulse, fwd_initial_state)
 
     @staticmethod
     def vmap(info, in_dims, *args):
@@ -107,5 +125,8 @@ class RecurrenceCUDA(Function):
             )
         )
 
-        out = RecurrenceCUDA.apply(decay, impulse, initial_state)
+        out = Recurrence.apply(decay, impulse, initial_state)
         return out.reshape(info.batch_size, -1, *out.shape[1:]), 0
+
+
+RecurrenceCUDA = Recurrence
