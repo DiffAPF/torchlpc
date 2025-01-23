@@ -16,9 +16,13 @@ void scan_cpu(const at::Tensor &input, const at::Tensor &weights, const at::Tens
     TORCH_INTERNAL_ASSERT(initials.device().is_cpu(), "Initials must be on CPU");
     TORCH_INTERNAL_ASSERT(weights.device().is_cpu(), "Weights must be on CPU");
     TORCH_INTERNAL_ASSERT(output.device().is_cpu(), "Output must be on CPU");
-    TORCH_INTERNAL_ASSERT(input.is_contiguous(), "Input must be contiguous");
-    TORCH_INTERNAL_ASSERT(weights.is_contiguous(), "Weights must be contiguous");
+    // TORCH_INTERNAL_ASSERT(input.is_contiguous(), "Input must be contiguous");
+    // TORCH_INTERNAL_ASSERT(weights.is_contiguous(), "Weights must be contiguous");
     TORCH_INTERNAL_ASSERT(output.is_contiguous(), "Output must be contiguous");
+
+    auto input_contiguous = input.contiguous();
+    auto weights_contiguous = weights.contiguous();
+    auto initials_contiguous = initials.contiguous();
 
     auto n_batch = input.size(0);
     auto T = input.size(1);
@@ -26,9 +30,9 @@ void scan_cpu(const at::Tensor &input, const at::Tensor &weights, const at::Tens
 
     std::pair<scalar_t, scalar_t> buffer[total_size];
 
-    const scalar_t *input_ptr = input.data_ptr<scalar_t>();
-    const scalar_t *initials_ptr = initials.data_ptr<scalar_t>();
-    const scalar_t *weights_ptr = weights.data_ptr<scalar_t>();
+    const scalar_t *input_ptr = input_contiguous.data_ptr<scalar_t>();
+    const scalar_t *initials_ptr = initials_contiguous.data_ptr<scalar_t>();
+    const scalar_t *weights_ptr = weights_contiguous.data_ptr<scalar_t>();
     scalar_t *output_ptr = output.data_ptr<scalar_t>();
 
     std::transform(weights_ptr, weights_ptr + total_size, input_ptr, buffer,
