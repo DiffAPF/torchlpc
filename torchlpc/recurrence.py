@@ -6,6 +6,7 @@ from typing import Tuple, Optional, Any, List
 
 from .parallel_scan import compute_linear_recurrence, WARPSIZE
 from .core import lpc_cuda, lpc_np
+from . import EXTENSION_LOADED
 
 
 class Recurrence(Function):
@@ -32,7 +33,7 @@ class Recurrence(Function):
         else:
             num_threads = torch.get_num_threads()
             # This is just a rough estimation of the computational cost
-            if min(n_dims, num_threads) < num_threads / 3:
+            if EXTENSION_LOADED and min(n_dims, num_threads) < num_threads / 3:
                 out = torch.ops.torchlpc.scan_cpu(impulse, decay, initial_state)
             else:
                 out = torch.from_numpy(

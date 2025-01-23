@@ -1,6 +1,7 @@
 import torch
 from typing import Optional
 from pathlib import Path
+import warnings
 
 so_files = list(Path(__file__).parent.glob("_C*.so"))
 # assert len(so_files) == 1, f"Expected one _C*.so file, found {len(so_files)}"
@@ -10,6 +11,7 @@ if len(so_files) == 1:
 elif len(so_files) > 1:
     raise ValueError(f"Expected one _C*.so file, found {len(so_files)}")
 else:
+    warnings.warn("No _C*.so file found. Custom extension not loaded.")
     EXTENSION_LOADED = False
 
 from .core import LPC
