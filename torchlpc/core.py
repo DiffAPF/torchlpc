@@ -1,3 +1,4 @@
+import warnings
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -5,6 +6,7 @@ from torch.autograd import Function
 from typing import Any, Tuple, Optional, Callable, List
 from numba import jit, njit, prange, cuda, float32, float64, complex64, complex128
 
+from . import EXTENSION_LOADED
 
 lpc_cuda_kernel_float32: Callable = None
 lpc_cuda_kernel_float64: Callable = None
@@ -159,7 +161,12 @@ class LPC(Function):
     def forward(x: torch.Tensor, A: torch.Tensor, zi: torch.Tensor) -> torch.Tensor:
         if x.is_cuda:
             y = lpc_cuda(x.detach(), A.detach(), zi.detach())
+        elif EXTENSION_LOADED:
+            y = torch.ops.torchlpc.lpc_cpu(x, A, zi)
         else:
+            warnings.warn(
+                "Cannot find custom extension. Falling back to Numba implementation which will be deprecated in v1.0."
+            )
             y = lpc_np(
                 x.detach().cpu().numpy(),
                 A.detach().cpu().numpy(),
