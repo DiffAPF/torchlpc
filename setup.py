@@ -1,4 +1,5 @@
 import setuptools
+import torch
 from torch.utils import cpp_extension
 
 NAME = "torchlpc"
@@ -9,6 +10,14 @@ EMAIL = "chin-yun.yu@qmul.ac.uk"
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
+
+
+extra_link_args = []
+extra_compile_args = {}
+# check if openmp is available
+if torch.backends.openmp.is_available():
+    extra_compile_args["cxx"] = ["-fopenmp"]
+    extra_link_args.append("-lgomp")
 
 setuptools.setup(
     name=NAME,
@@ -27,7 +36,12 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     ext_modules=[
-        cpp_extension.CppExtension("torchlpc._C", ["torchlpc/csrc/scan_cpu.cpp"])
+        cpp_extension.CppExtension(
+            "torchlpc._C",
+            ["torchlpc/csrc/scan_cpu.cpp"],
+            extra_compile_args=extra_compile_args,
+            extra_link_args=extra_link_args,
+        )
     ],
     cmdclass={"build_ext": cpp_extension.BuildExtension},
 )
