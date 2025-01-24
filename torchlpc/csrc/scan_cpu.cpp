@@ -5,7 +5,7 @@
 #include <utility>
 
 template <typename scalar_t>
-void scan_cpu(const at::Tensor &input, const at::Tensor &weights, const at::Tensor &initials, at::Tensor &output)
+void scan_cpu(const at::Tensor &input, const at::Tensor &weights, const at::Tensor &initials, const at::Tensor &output)
 {
     TORCH_CHECK(input.dim() == 2, "Input must be 2D");
     TORCH_CHECK(initials.dim() == 1, "Initials must be 1D");
@@ -16,8 +16,6 @@ void scan_cpu(const at::Tensor &input, const at::Tensor &weights, const at::Tens
     TORCH_INTERNAL_ASSERT(initials.device().is_cpu(), "Initials must be on CPU");
     TORCH_INTERNAL_ASSERT(weights.device().is_cpu(), "Weights must be on CPU");
     TORCH_INTERNAL_ASSERT(output.device().is_cpu(), "Output must be on CPU");
-    // TORCH_INTERNAL_ASSERT(input.is_contiguous(), "Input must be contiguous");
-    // TORCH_INTERNAL_ASSERT(weights.is_contiguous(), "Weights must be contiguous");
     TORCH_INTERNAL_ASSERT(output.is_contiguous(), "Output must be contiguous");
 
     auto input_contiguous = input.contiguous();
@@ -39,19 +37,19 @@ void scan_cpu(const at::Tensor &input, const at::Tensor &weights, const at::Tens
                    [](const scalar_t &a, const scalar_t &b)
                    { return std::make_pair(a, b); });
 
-    at::parallel_for(0, n_batch, 1, [&](int64_t start, int64_t end)
-                     {
-        for (auto b = start; b < end; b++)
-        {
+    at::parallel_for(0, n_batch, 1, [ & ](int64_t start, int64_t end) {
+        for (auto b = start; b < end; b++) {
             std::inclusive_scan(
                 buffer + b * T,
                 buffer + (b + 1) * T,
                 buffer + b * T,
-                [](const std::pair<scalar_t, scalar_t> &a, const std::pair<scalar_t, scalar_t> &b) {
+                [](const std::pair < scalar_t, scalar_t > & a,
+                    const std::pair < scalar_t, scalar_t > & b) {
                     return std::make_pair(a.first * b.first, a.second * b.first + b.second);
                 },
-                std::make_pair((scalar_t)1.0, initials_ptr[b]));
-        } });
+                std::make_pair((scalar_t) 1.0, initials_ptr[b]));
+        }
+    });
 
     std::transform(buffer, buffer + total_size, output_ptr, [](const std::pair<scalar_t, scalar_t> &a)
                    { return a.second; });
@@ -62,7 +60,6 @@ at::Tensor scan_cpu_wrapper(const at::Tensor &input, const at::Tensor &weights, 
     TORCH_CHECK(input.is_floating_point() || input.is_complex(), "Input must be floating point or complex");
     TORCH_CHECK(initials.scalar_type() == input.scalar_type(), "Initials must have the same scalar type as input");
     TORCH_CHECK(weights.scalar_type() == input.scalar_type(), "Weights must have the same scalar type as input");
-    // TORCH_CHECK(output.scalar_type() == input.scalar_type(), "Output must have the same scalar type as input");
 
     auto output = at::empty_like(input);
 
