@@ -17,7 +17,7 @@ extra_compile_args = {}
 # check if openmp is available
 if torch.backends.openmp.is_available():
     extra_compile_args["cxx"] = ["-fopenmp"]
-    extra_link_args.append("-lgomp")
+    extra_link_args.append("-fopenmp")
 
 setuptools.setup(
     name=NAME,
