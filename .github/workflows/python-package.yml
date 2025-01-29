@@ -43,8 +43,8 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Build CPP extension
       run: |
-        export CC=$(brew --prefix llvm)/bin/clang
-        export CXX=$(brew --prefix llvm)/bin/clang++
+        export CC=$(brew --prefix llvm@15)/bin/clang
+        export CXX=$(brew --prefix llvm@15)/bin/clang++
         python setup.py build
         find build/ -name "_C*.so" -exec cp {} ./torchlpc/ \;
     - name: Test with pytest
