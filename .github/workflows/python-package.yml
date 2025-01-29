@@ -25,6 +25,12 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Use homebrew clang
+      if: matrix.os == 'macos-13'
+      run: |
+        brew install libomp
+        export CC=$(brew --prefix llvm@15)/bin/clang
+        export CXX=$(brew --prefix llvm@15)/bin/clang++
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
