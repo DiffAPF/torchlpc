@@ -25,7 +25,7 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Use homebrew clang
+    - name: Install libomp on macOS
       if: matrix.os == 'macos-13'
       run: |
         brew install libomp
@@ -41,11 +41,15 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Build CPP extension
+    - name: Build CPP extension with clang++
+      if: matrix.os == 'macos-13'
       run: |
-        if [ ${{ matrix.os }} == 'macos-13' ]; then
-          export CXX=$(brew --prefix llvm@15)/bin/clang++
-        fi
+        export CXX=$(brew --prefix llvm@15)/bin/clang++
+        python setup.py build
+        find build/ -name "_C*.so" -exec cp {} ./torchlpc/ \;
+    - name: Build CPP extension with g++
+      if: matrix.os == 'ubuntu-latest'
+      run: |
         python setup.py build
         find build/ -name "_C*.so" -exec cp {} ./torchlpc/ \;
     - name: Test with pytest
