@@ -285,8 +285,8 @@ at::Tensor scan_cuda_wrapper(const at::Tensor &input, const at::Tensor &weights,
                 weights_contiguous.const_data_ptr<scalar_t>(),
                 input_contiguous.const_data_ptr<scalar_t>(),
                 initials.const_data_ptr<scalar_t>(),
-                output.mutable_data_ptr<scalar_t>(), input.size(1),
-                input.size(0));
+                output.mutable_data_ptr<scalar_t>(), input_contiguous.size(1),
+                input_contiguous.size(0));
         });
     return output.transpose(0, 1).contiguous();
 }
