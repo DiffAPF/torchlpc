@@ -124,6 +124,10 @@ def test_float64_vs_32_cuda():
     [True, False],
 )
 @pytest.mark.parametrize(
+    "cmplx",
+    [True, False],
+)
+@pytest.mark.parametrize(
     "device",
     [
         "cpu",
@@ -139,13 +143,25 @@ def test_parallel_scan(
     x_requires_grad: bool,
     a_requires_grad: bool,
     zi_requires_grad: bool,
+    cmplx: bool,
     device: str,
 ):
     batch_size = 2
     samples = 123
-    x = torch.randn(batch_size, samples, dtype=torch.double, device=device)
-    A = torch.rand(batch_size, samples, dtype=torch.double, device=device) * 2 - 1
-    zi = torch.randn(batch_size, dtype=torch.double, device=device)
+    dtype = torch.complex128 if cmplx else torch.double
+    x = torch.randn(batch_size, samples, dtype=dtype, device=device)
+    if cmplx:
+        A = torch.rand(
+            batch_size, samples, dtype=torch.double, device=device
+        ).sqrt() * torch.exp(
+            1j
+            * torch.rand(batch_size, samples, dtype=torch.double, device=device)
+            * 2
+            * torch.pi
+        )
+    else:
+        A = torch.rand(batch_size, samples, dtype=dtype, device=device) * 2 - 1
+    zi = torch.randn(batch_size, dtype=dtype, device=device)
 
     A.requires_grad = a_requires_grad
     x.requires_grad = x_requires_grad
