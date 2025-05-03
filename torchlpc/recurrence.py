@@ -19,22 +19,25 @@ class Recurrence(Function):
         n_dims, n_steps = decay.shape
         if decay.is_cuda:
             if n_dims * WARPSIZE < n_steps:
-                out = torch.empty_like(impulse)
-                compute_linear_recurrence(
-                    cuda.as_cuda_array(decay.detach()),
-                    cuda.as_cuda_array(impulse.detach()),
-                    cuda.as_cuda_array(initial_state.detach()),
-                    cuda.as_cuda_array(out),
-                    n_dims,
-                    n_steps,
-                )
+                if EXTENSION_LOADED:
+                    out = torch.ops.torchlpc.scan(impulse, decay, initial_state)
+                else:
+                    out = torch.empty_like(impulse)
+                    compute_linear_recurrence(
+                        cuda.as_cuda_array(decay.detach()),
+                        cuda.as_cuda_array(impulse.detach()),
+                        cuda.as_cuda_array(initial_state.detach()),
+                        cuda.as_cuda_array(out),
+                        n_dims,
+                        n_steps,
+                    )
             else:
                 out = lpc_cuda(impulse, -decay.unsqueeze(2), initial_state.unsqueeze(1))
         else:
             num_threads = torch.get_num_threads()
             # This is just a rough estimation of the computational cost
             if EXTENSION_LOADED and min(n_dims, num_threads) < num_threads / 3:
-                out = torch.ops.torchlpc.scan_cpu(impulse, decay, initial_state)
+                out = torch.ops.torchlpc.scan(impulse, decay, initial_state)
             else:
                 out = torch.from_numpy(
                     lpc_np(
