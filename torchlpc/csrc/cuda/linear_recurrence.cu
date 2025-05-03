@@ -1,5 +1,9 @@
 #include <assert.h>
+#include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAGuard.h>
 #include <stdio.h>
+#include <torch/script.h>
+#include <torch/torch.h>
 
 #define CEIL_DIV(x, y) ((x + y - 1) / y)
 
@@ -57,14 +61,17 @@ __device__ int2 compute_warp_start_stop(int block_idx, int warp_idx,
 // decay storage, h_storage:
 //   each a n_dims x 33 x n_blocks matrix on GPU with 33rd column for block
 //   reduction
-__global__ void reduction_kernel(float *decays, float *impulses,
-                                 float *initial_state, float *_decay_storage,
-                                 float *_h_storage, int n_dims, int n_steps) {
+template <typename scalar_t>
+__global__ void reduction_kernel(const scalar_t *decays,
+                                 const scalar_t *impulses,
+                                 const scalar_t *initial_state,
+                                 scalar_t *_decay_storage, scalar_t *_h_storage,
+                                 int n_dims, int n_steps) {
     int warp = threadIdx.x / 32;
     int lane = threadIdx.x % 32;
 
-    float *decay_storage = &_decay_storage[blockIdx.x * 33 * n_dims];
-    float *h_storage = &_h_storage[blockIdx.x * 33 * n_dims];
+    scalar_t *decay_storage = &_decay_storage[blockIdx.x * 33 * n_dims];
+    scalar_t *h_storage = &_h_storage[blockIdx.x * 33 * n_dims];
 
     int2 start_stop =
         compute_warp_start_stop(blockIdx.x, warp, gridDim.x, n_steps);
@@ -78,8 +85,8 @@ __global__ void reduction_kernel(float *decays, float *impulses,
      * (feature_idx, warp, block).
      */
     for (int i = lane; i < n_dims; i += 32) {
-        float cum_decay = 1.0;
-        float h = 0.0;
+        scalar_t cum_decay = static_cast<scalar_t>(1.0);
+        scalar_t h = static_cast<scalar_t>(0.0);
         if (blockIdx.x == 0 && warp == 0 && initial_state != NULL) {
             h = initial_state[i];
         }
@@ -106,8 +113,8 @@ __global__ void reduction_kernel(float *decays, float *impulses,
     // TODO: parallel reduction (or scan). Need to worry about changing the warp
     //       reduction values (as I use them again later)
     for (int i = lane + 32 * warp; i < n_dims; i += blockDim.x) {
-        float cum_decay = 1.0;
-        float h = 0.0;
+        scalar_t cum_decay = static_cast<scalar_t>(1.0);
+        scalar_t h = static_cast<scalar_t>(0.0);
         for (int t = 0; t < 32; t++) {
             cum_decay *= decay_storage[i + t * n_dims];
             h = decay_storage[i + t * n_dims] * h + h_storage[i + t * n_dims];
@@ -117,7 +124,8 @@ __global__ void reduction_kernel(float *decays, float *impulses,
     }
 }
 
-__global__ void block_scan_kernel(float *decay_storage, float *h_storage,
+template <typename scalar_t>
+__global__ void block_scan_kernel(scalar_t *decay_storage, scalar_t *h_storage,
                                   int n_dims, int n_blocks) {
     /*
      * Scan over blocks.
@@ -142,9 +150,11 @@ __global__ void block_scan_kernel(float *decay_storage, float *h_storage,
     }
 }
 
-__global__ void warp_scan_kernel(float *decays, float *impulses,
-                                 float *initial_state, float *out,
-                                 float *decay_storage, float *h_storage,
+template <typename scalar_t>
+__global__ void warp_scan_kernel(const scalar_t *decays,
+                                 const scalar_t *impulses,
+                                 const scalar_t *initial_state, scalar_t *out,
+                                 scalar_t *decay_storage, scalar_t *h_storage,
                                  int n_dims, int n_steps) {
     int warp = threadIdx.x / 32;
     int lane = threadIdx.x % 32;
@@ -196,7 +206,7 @@ __global__ void warp_scan_kernel(float *decays, float *impulses,
      * writes to output for indices warp_start up to warp_stop.
      */
     for (int i = lane; i < n_dims; i += 32) {
-        float h = 0.0;
+        scalar_t h = static_cast<scalar_t>(0.0);
         if (blockIdx.x == 0 && warp == 0) {
             if (initial_state != NULL) {
                 h = initial_state[i];
@@ -212,24 +222,6 @@ __global__ void warp_scan_kernel(float *decays, float *impulses,
     }
 }
 
-__global__ void serial_linear_recurrence(float *decays, float *impulses,
-                                         float *initial_state, float *out,
-                                         int n_dims, int n_steps) {
-    // computes h_t = lambda_t h{t-1} + x_t
-
-    for (int dim_idx = threadIdx.x + blockIdx.x * blockDim.x; dim_idx < n_dims;
-         dim_idx += blockDim.x * gridDim.x) {
-        float val = initial_state[dim_idx];
-
-        for (int step = 0; step < n_steps; step++) {
-            int idx = dim_idx + step * n_dims;
-            val = decays[idx] * val + impulses[idx];
-            out[idx] = val;
-        }
-    }
-}
-
-extern "C" {
 /*
  * This is the main method for the prefix sum kernels.
  * decays, impulses, out:
@@ -237,9 +229,10 @@ extern "C" {
  * initial_state:
  *   array of size n_dims located on GPU
  */
-void compute_linear_recurrence(float *decays, float *impulses,
-                               float *initial_state, float *out, int n_dims,
-                               int n_steps) {
+template <typename scalar_t>
+void compute_linear_recurrence(const scalar_t *decays, const scalar_t *impulses,
+                               const scalar_t *initial_state, scalar_t *out,
+                               int n_dims, int n_steps) {
     // TODO: query
     int n_SMs = 15;
     int n_blocks_per_sm = 2;
@@ -251,10 +244,10 @@ void compute_linear_recurrence(float *decays, float *impulses,
     // TODO: make user pass in working memory? This allows integration
     //       with CNMeM (used by Theano)
     int reduction_mem_sz = 2 * n_blocks * 33 * n_dims * sizeof(float);
-    float *d_reduction_mem;
+    scalar_t *d_reduction_mem;
     gpuErrChk(cudaMalloc(&d_reduction_mem, reduction_mem_sz));
-    float *d_decay_storage = &d_reduction_mem[0 * n_blocks * 33 * n_dims];
-    float *d_h_storage = &d_reduction_mem[1 * n_blocks * 33 * n_dims];
+    scalar_t *d_decay_storage = &d_reduction_mem[0 * n_blocks * 33 * n_dims];
+    scalar_t *d_h_storage = &d_reduction_mem[1 * n_blocks * 33 * n_dims];
 
     // TODO: run kernels on non-default stream?
     reduction_kernel<<<n_blocks, 1024>>>(decays, impulses, initial_state,
@@ -271,53 +264,31 @@ void compute_linear_recurrence(float *decays, float *impulses,
     gpuErrChk(cudaFree(d_reduction_mem));
 }
 
-void compute_serial_linear_recurrence(float *decays, float *impulses,
-                                      float *initial_state, float *out,
-                                      int n_dims, int n_steps) {
-    // TODO: query
-    int n_SMs = 15;
-    int n_blocks_per_sm = 2;
+at::Tensor scan_cuda_wrapper(const at::Tensor &input, const at::Tensor &weights,
+                             const at::Tensor &initials) {
+    TORCH_CHECK(input.is_floating_point() || input.is_complex(),
+                "Input must be floating point or complex");
+    TORCH_CHECK(initials.scalar_type() == input.scalar_type(),
+                "Initials must have the same scalar type as input");
+    TORCH_CHECK(weights.scalar_type() == input.scalar_type(),
+                "Weights must have the same scalar type as input");
 
-    int n_blocks = n_SMs * n_blocks_per_sm;
-    serial_linear_recurrence<<<n_blocks, 1024>>>(
-        decays, impulses, initial_state, out, n_dims, n_steps);
+    auto input_contiguous = input.transpose(0, 1).contiguous();
+    auto weights_contiguous = weights.transpose(0, 1).contiguous();
+    auto output = at::empty_like(input_contiguous);
+
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+
+    AT_DISPATCH_FLOATING_AND_COMPLEX_TYPES(
+        input.scalar_type(), "compute_linear_recurrence", [&] {
+            compute_linear_recurrence<scalar_t>(
+                weights_contiguous.const_data_ptr<scalar_t>(),
+                input_contiguous.const_data_ptr<scalar_t>(),
+                initials.const_data_ptr<scalar_t>(),
+                output.mutable_data_ptr<scalar_t>(), input.size(1),
+                input.size(0));
+        });
+    return output.transpose(0, 1).contiguous();
 }
-}
 
-void test() {
-    int n_dims = 100;
-    int n_steps = 1000000;
-    int n_elements = n_dims * n_steps;
-
-    float *decays = (float *)calloc(n_elements, sizeof(float));
-    for (int i = 0; i < n_elements; i++) {
-        decays[i] = .999;
-    }
-    float *d_decays;
-    gpuErrChk(cudaMalloc(&d_decays, n_elements * sizeof(float)));
-    gpuErrChk(cudaMemcpy(d_decays, decays, n_elements * sizeof(float),
-                         cudaMemcpyHostToDevice));
-
-    float *impulses = (float *)calloc(n_elements, sizeof(float));
-    for (int i = 0; i < n_dims; i++) {
-        impulses[i + 0 * n_dims] = 2.0;
-    }
-    float *d_impulses;
-    gpuErrChk(cudaMalloc(&d_impulses, n_elements * sizeof(float)));
-    gpuErrChk(cudaMemcpy(d_impulses, impulses, n_elements * sizeof(float),
-                         cudaMemcpyHostToDevice));
-
-    float *out = (float *)calloc(n_elements, sizeof(float));
-    float *d_out;
-    gpuErrChk(cudaMalloc(&d_out, n_elements * sizeof(float)));
-    gpuErrChk(cudaMemset(d_out, 0, n_elements * sizeof(float)));
-
-    compute_linear_recurrence(d_decays, d_impulses, NULL, d_out, n_dims,
-                              n_steps);
-    gpuErrChk(cudaMemcpy(out, d_out, n_elements * sizeof(float),
-                         cudaMemcpyDeviceToHost));
-
-    gpuErrChk(cudaFree(d_decays));
-    gpuErrChk(cudaFree(d_impulses));
-    gpuErrChk(cudaFree(d_out));
-}
+TORCH_LIBRARY_IMPL(torchlpc, CUDA, m) { m.impl("scan", &scan_cuda_wrapper); }
