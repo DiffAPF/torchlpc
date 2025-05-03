@@ -142,11 +142,11 @@ at::Tensor lpc_cpu(const at::Tensor &x, const at::Tensor &a,
 }
 
 TORCH_LIBRARY(torchlpc, m) {
-    m.def("torchlpc::scan_cpu(Tensor a, Tensor b, Tensor c) -> Tensor");
-    m.def("torchlpc::lpc_cpu(Tensor a, Tensor b, Tensor c) -> Tensor");
+    m.def("torchlpc::scan(Tensor a, Tensor b, Tensor c) -> Tensor");
+    m.def("torchlpc::lpc(Tensor a, Tensor b, Tensor c) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(torchlpc, CPU, m) {
-    m.impl("scan_cpu", &scan_cpu_wrapper);
-    m.impl("lpc_cpu", &lpc_cpu);
+    m.impl("scan", &scan_cpu_wrapper);
+    m.impl("lpc", &lpc_cpu);
 }
