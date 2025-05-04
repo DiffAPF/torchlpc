@@ -104,7 +104,7 @@ void lpc_cpu_core(const torch::Tensor &a, const torch::Tensor &padded_out) {
     auto a_contiguous = a.contiguous();
 
     const scalar_t *a_ptr = a_contiguous.const_data_ptr<scalar_t>();
-    scalar_t *out_ptr = padded_out.mutable_data_ptrscalar_t>();
+    scalar_t *out_ptr = padded_out.mutable_data_ptr<scalar_t>();
 
     at::parallel_for(0, B, 1, [&](int64_t start, int64_t end) {
         for (auto b = start; b < end; b++) {
