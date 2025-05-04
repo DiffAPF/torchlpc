@@ -1,11 +1,8 @@
-# This config was automatically generated from your source code
-# Stacks detected: cicd:github-actions:.github/workflows,deps:python:.,file:setup.py:.
 version: 2.1
 orbs:
   python: circleci/python@2
 jobs:
   build-package:
-    # Install dependencies and run tests
     machine:
       image: linux-cuda-12:default
       resource_class: gpu.nvidia.small
@@ -31,8 +28,7 @@ jobs:
           command: pytest --junitxml=junit.xml || ((($? == 5)) && echo 'Did not find any tests to run.')
       - store_test_results:
           path: junit.xml
-      
 workflows:
   build-and-test:
     jobs:
-      - build-package:
+      - build-package
