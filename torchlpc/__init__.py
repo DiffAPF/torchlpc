@@ -3,16 +3,24 @@ from typing import Optional
 from pathlib import Path
 import warnings
 
-so_files = list(Path(__file__).parent.glob("_C*.so"))
-# assert len(so_files) == 1, f"Expected one _C*.so file, found {len(so_files)}"
-if len(so_files) == 1:
-    torch.ops.load_library(so_files[0])
+# so_files = list(Path(__file__).parent.glob("_C*.so"))
+# # assert len(so_files) == 1, f"Expected one _C*.so file, found {len(so_files)}"
+# if len(so_files) == 1:
+#     torch.ops.load_library(so_files[0])
+#     EXTENSION_LOADED = True
+# elif len(so_files) > 1:
+#     raise ValueError(f"Expected one _C*.so file, found {len(so_files)}")
+# else:
+#     warnings.warn("No _C*.so file found. Custom extension not loaded.")
+#     EXTENSION_LOADED = False
+
+try:
+    from . import _C
+
     EXTENSION_LOADED = True
-elif len(so_files) > 1:
-    raise ValueError(f"Expected one _C*.so file, found {len(so_files)}")
-else:
-    warnings.warn("No _C*.so file found. Custom extension not loaded.")
+except ImportError:
     EXTENSION_LOADED = False
+    warnings.warn("Custom extension not loaded. Falling back to Numba implementation.")
 
 from .core import LPC
 
