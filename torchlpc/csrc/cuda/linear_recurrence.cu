@@ -74,7 +74,7 @@ __global__ void reduction_kernel(const scalar_t *decays,
     scalar_t *h_storage = &_h_storage[blockIdx.x * 33 * n_dims];
 
     int2 start_stop =
-        compute_warp_start_stop(blockIdx.x, warp, gridDim.x, n_steps);
+        compute_warp_start_stop(blockIdx.x, lane, gridDim.x, n_steps);
     int warp_start = start_stop.x;
     int warp_stop = start_stop.y;
 
@@ -84,22 +84,22 @@ __global__ void reduction_kernel(const scalar_t *decays,
      * from warp_start to warp_stop (including initial state) at index
      * (feature_idx, warp, block).
      */
-    for (int i = lane; i < n_dims; i += 32) {
+    for (int i = warp; i < n_dims; i += CEIL_DIV(blockDim.x, 32)) {
         scalar_t cum_decay = static_cast<scalar_t>(1.0);
         scalar_t h = static_cast<scalar_t>(0.0);
-        if (blockIdx.x == 0 && warp == 0 && initial_state != NULL) {
+        if (blockIdx.x == 0 && lane == 0 && initial_state != NULL) {
             h = initial_state[i];
         }
 
         for (int t = warp_start; t < warp_stop; t++) {
-            cum_decay *= decays[i + t * n_dims];
-            h = decays[i + t * n_dims] * h + impulses[i + t * n_dims];
+            cum_decay *= decays[i * n_steps + t];
+            h = decays[i * n_steps + t] * h + impulses[i * n_steps + t];
         }
 
         // TODO: store into shared memory, work in shared memory sized blocks
         // store into global memory
-        decay_storage[i + warp * n_dims] = cum_decay;
-        h_storage[i + warp * n_dims] = h;
+        decay_storage[i + lane * n_dims] = cum_decay;
+        h_storage[i + lane * n_dims] = h;
     }
 
     __syncthreads();
@@ -112,7 +112,7 @@ __global__ void reduction_kernel(const scalar_t *decays,
      */
     // TODO: parallel reduction (or scan). Need to worry about changing the warp
     //       reduction values (as I use them again later)
-    for (int i = lane + 32 * warp; i < n_dims; i += blockDim.x) {
+    for (int i = threadIdx.x; i < n_dims; i += blockDim.x) {
         scalar_t cum_decay = static_cast<scalar_t>(1.0);
         scalar_t h = static_cast<scalar_t>(0.0);
         for (int t = 0; t < 32; t++) {
@@ -176,7 +176,7 @@ __global__ void warp_scan_kernel(const scalar_t *decays,
      * condition) up to and including the indexed warp and block.
      */
     // TODO: parallel scan
-    for (int i = lane + 32 * warp; i < n_dims; i += blockDim.x) {
+    for (int i = threadIdx.x; i < n_dims; i += blockDim.x) {
         for (int t = 0; t < 32; t++) {
             if (t == 0 && blockIdx.x == 0) {
                 // the reduction over warp 0 (including initial condition) is
@@ -195,7 +195,7 @@ __global__ void warp_scan_kernel(const scalar_t *decays,
     __syncthreads();
 
     int2 start_stop =
-        compute_warp_start_stop(blockIdx.x, warp, gridDim.x, n_steps);
+        compute_warp_start_stop(blockIdx.x, lane, gridDim.x, n_steps);
     int warp_start = start_stop.x;
     int warp_stop = start_stop.y;
 
@@ -205,19 +205,19 @@ __global__ void warp_scan_kernel(const scalar_t *decays,
      * state (either from the "initial_state" or the storage arrays) and then
      * writes to output for indices warp_start up to warp_stop.
      */
-    for (int i = lane; i < n_dims; i += 32) {
+    for (int i = warp; i < n_dims; i += CEIL_DIV(blockDim.x, 32)) {
         scalar_t h = static_cast<scalar_t>(0.0);
-        if (blockIdx.x == 0 && warp == 0) {
+        if (blockIdx.x == 0 && lane == 0) {
             if (initial_state != NULL) {
                 h = initial_state[i];
             }
         } else {
-            h = h_storage[i + (warp - 1) * n_dims + blockIdx.x * 33 * n_dims];
+            h = h_storage[i + (lane - 1) * n_dims + blockIdx.x * 33 * n_dims];
         }
 
         for (int t = warp_start; t < warp_stop; t++) {
-            h = decays[i + t * n_dims] * h + impulses[i + t * n_dims];
-            out[i + t * n_dims] = h;
+            h = decays[i * n_steps + t] * h + impulses[i * n_steps + t];
+            out[i * n_steps + t] = h;
         }
     }
 }
@@ -233,13 +233,10 @@ template <typename scalar_t>
 void compute_linear_recurrence(const scalar_t *decays, const scalar_t *impulses,
                                const scalar_t *initial_state, scalar_t *out,
                                int n_dims, int n_steps) {
-    // TODO: query
-    int n_SMs = 15;
-    int n_blocks_per_sm = 2;
-
     // we want at least 32 elements per block, but no reason to run
     // with more than the maximum number of concurrent blocks
-    int n_blocks = min(CEIL_DIV(n_steps, 32), n_SMs * n_blocks_per_sm);
+    // NOTE: 128 is decided empirically.
+    int n_blocks = min(CEIL_DIV(n_steps, 32), 128);
 
     // TODO: make user pass in working memory? This allows integration
     //       with CNMeM (used by Theano)
@@ -273,8 +270,8 @@ at::Tensor scan_cuda_wrapper(const at::Tensor &input, const at::Tensor &weights,
     TORCH_CHECK(weights.scalar_type() == input.scalar_type(),
                 "Weights must have the same scalar type as input");
 
-    auto input_contiguous = input.transpose(0, 1).contiguous();
-    auto weights_contiguous = weights.transpose(0, 1).contiguous();
+    auto input_contiguous = input.contiguous();
+    auto weights_contiguous = weights.contiguous();
     auto output = at::empty_like(input_contiguous);
 
     const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
@@ -285,10 +282,10 @@ at::Tensor scan_cuda_wrapper(const at::Tensor &input, const at::Tensor &weights,
                 weights_contiguous.const_data_ptr<scalar_t>(),
                 input_contiguous.const_data_ptr<scalar_t>(),
                 initials.const_data_ptr<scalar_t>(),
-                output.mutable_data_ptr<scalar_t>(), input_contiguous.size(1),
-                input_contiguous.size(0));
+                output.mutable_data_ptr<scalar_t>(), input_contiguous.size(0),
+                input_contiguous.size(1));
         });
-    return output.transpose(0, 1).contiguous();
+    return output.contiguous();
 }
 
 TORCH_LIBRARY_IMPL(torchlpc, CUDA, m) { m.impl("scan", &scan_cuda_wrapper); }
