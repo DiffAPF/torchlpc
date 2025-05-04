@@ -4,27 +4,18 @@ version: 2.1
 orbs:
   python: circleci/python@2
 jobs:
-  test-python:
+  build-package:
     # Install dependencies and run tests
-    docker:
-      - image: cimg/python:3.9-node
+    machine:
+      image: linux-cuda-12:default
+      resource_class: gpu.nvidia.small
     steps:
       - checkout
       - python/install-packages:
-          pip-dependency-file: dev-requirements.txt
+          pip-dependency-file: requirements.txt
           pkg-manager: pip
-          args: torch pytest
-      - run:
-          name: Run tests
-          command: pytest --junitxml=junit.xml || ((($? == 5)) && echo 'Did not find any tests to run.')
-      - store_test_results:
-          path: junit.xml
-  build-package:
-    # build python package
-    docker:
-      - image: cimg/python:3.9-node
-    steps:
-      - checkout
+          args: pytest
+          pypi-cache: false
       - run:
           name: Create the ~/artifacts directory if it doesn't exist
           command: mkdir -p ~/artifacts
@@ -32,10 +23,16 @@ jobs:
       - store_artifacts:
           path: dist
           destination: ~/artifacts
+      - run:
+          name: Copy .so file for testing
+          command: find build/ -name "_C*.so" -exec cp {} ./torchlpc/ \;
+      - run:
+          name: Run tests
+          command: pytest --junitxml=junit.xml || ((($? == 5)) && echo 'Did not find any tests to run.')
+      - store_test_results:
+          path: junit.xml
+      
 workflows:
   build-and-test:
     jobs:
-      - test-python
       - build-package:
-          requires:
-            - test-python
