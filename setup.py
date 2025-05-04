@@ -36,7 +36,7 @@ def get_extensions():
         extra_compile_args["cxx"] = ["-fopenmp"]
         extra_link_args.append("-lgomp")
 
-    this_dir = os.path.dirname(os.path.curdir)
+    this_dir = os.path.abspath(os.path.dirname(__file__))
     extensions_dir = os.path.join(this_dir, library_name, "csrc")
     sources = list(glob.glob(os.path.join(extensions_dir, "*.cpp")))
 
