@@ -11,7 +11,9 @@ jobs:
     steps:
       - checkout
       - python/install-packages:
+          pip-dependency-file: dev-requirements.txt
           pkg-manager: pip
+          args: -r cpuonly-torch.txt pytest
       - run:
           name: Run tests
           command: pytest --junitxml=junit.xml || ((($? == 5)) && echo 'Did not find any tests to run.')
