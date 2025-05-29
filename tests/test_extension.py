@@ -64,20 +64,32 @@ def test_scan_equiv(samples: int, cmplx: bool, device: str):
     ).item()
 
 
-@pytest.mark.parametrize(
-    "samples",
-    [1024],
-)
+@pytest.mark.parametrize("samples", [1021, 4097])
 @pytest.mark.parametrize(
     "cmplx",
     [True, False],
 )
-def test_lpc_equiv(samples: int, cmplx: bool):
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA not available"
+            ),
+        ),
+    ],
+)
+def test_lpc_equiv(samples: int, cmplx: bool, device: str):
     batch_size = 4
     x, A, zi = tuple(
-        x.to("cpu") for x in create_test_inputs(batch_size, samples, cmplx)
+        x.to(device) for x in create_test_inputs(batch_size, samples, cmplx)
     )
-    numba_y = torch.from_numpy(lpc_np(x.numpy(), A.numpy(), zi.numpy()))
+    if device == "cuda":
+        numba_y = lpc_cuda(x, A, zi)
+    else:
+        numba_y = torch.from_numpy(lpc_np(x.numpy(), A.numpy(), zi.numpy()))
     ext_y = torch.ops.torchlpc.lpc(x, A, zi)
 
     assert torch.allclose(numba_y, ext_y)
