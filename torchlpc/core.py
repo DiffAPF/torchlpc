@@ -159,20 +159,21 @@ def lpc_np(x: np.ndarray, A: np.ndarray, zi: np.ndarray) -> np.ndarray:
 class LPC(Function):
     @staticmethod
     def forward(x: torch.Tensor, A: torch.Tensor, zi: torch.Tensor) -> torch.Tensor:
-        if x.is_cuda:
-            y = lpc_cuda(x.detach(), A.detach(), zi.detach())
-        elif EXTENSION_LOADED:
-            y = torch.ops.torchlpc.lpc_cpu(x, A, zi)
+        if EXTENSION_LOADED:
+            y = torch.ops.torchlpc.lpc(x, A, zi)
         else:
             warnings.warn(
                 "Cannot find custom extension. Falling back to Numba implementation which will be deprecated in v1.0."
             )
-            y = lpc_np(
-                x.detach().cpu().numpy(),
-                A.detach().cpu().numpy(),
-                zi.detach().cpu().numpy(),
-            )
-            y = torch.from_numpy(y).to(x.device, x.dtype)
+            if x.is_cuda:
+                y = lpc_cuda(x.detach(), A.detach(), zi.detach())
+            else:
+                y = lpc_np(
+                    x.detach().cpu().numpy(),
+                    A.detach().cpu().numpy(),
+                    zi.detach().cpu().numpy(),
+                )
+                y = torch.from_numpy(y).to(x.device, x.dtype)
         return y
 
     @staticmethod

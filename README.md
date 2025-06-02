@@ -116,8 +116,8 @@ This algorithm is more efficient than [^3] because it only needs one pass of fil
 
 ## TODO
 
-- [ ] Use PyTorch C++ extension for faster computation.
-- [ ] Use native CUDA kernels for GPU computation.
+- [x] Use PyTorch C++ extension for faster computation.
+- [x] Use native CUDA kernels for GPU computation.
 - [ ] Add examples.
 
 ## Related Projects

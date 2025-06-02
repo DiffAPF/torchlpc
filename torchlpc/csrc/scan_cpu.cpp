@@ -1,9 +1,27 @@
+#include <Python.h>
 #include <torch/script.h>
 #include <torch/torch.h>
 
 #include <algorithm>
 #include <utility>
 #include <vector>
+
+extern "C" {
+/* Creates a dummy empty _C module that can be imported from Python.
+   The import from Python will load the .so associated with this extension
+   built from this file, so that all the TORCH_LIBRARY calls below are run.*/
+PyObject *PyInit__C(void) {
+    static struct PyModuleDef module_def = {
+        PyModuleDef_HEAD_INIT,
+        "_C", /* name of module */
+        NULL, /* module documentation, may be NULL */
+        -1,   /* size of per-interpreter state of the module,
+                 or -1 if the module keeps state in global variables. */
+        NULL, /* methods */
+    };
+    return PyModule_Create(&module_def);
+}
+}
 
 template <typename scalar_t>
 void scan_cpu(const at::Tensor &input, const at::Tensor &weights,
@@ -34,10 +52,11 @@ void scan_cpu(const at::Tensor &input, const at::Tensor &weights,
 
     std::pair<scalar_t, scalar_t> buffer[total_size];
 
-    const scalar_t *input_ptr = input_contiguous.data_ptr<scalar_t>();
-    const scalar_t *initials_ptr = initials_contiguous.data_ptr<scalar_t>();
-    const scalar_t *weights_ptr = weights_contiguous.data_ptr<scalar_t>();
-    scalar_t *output_ptr = output.data_ptr<scalar_t>();
+    const scalar_t *input_ptr = input_contiguous.const_data_ptr<scalar_t>();
+    const scalar_t *initials_ptr =
+        initials_contiguous.const_data_ptr<scalar_t>();
+    const scalar_t *weights_ptr = weights_contiguous.const_data_ptr<scalar_t>();
+    scalar_t *output_ptr = output.mutable_data_ptr<scalar_t>();
 
     std::transform(weights_ptr, weights_ptr + total_size, input_ptr, buffer,
                    [](const scalar_t &a, const scalar_t &b) {
@@ -84,8 +103,8 @@ void lpc_cpu_core(const torch::Tensor &a, const torch::Tensor &padded_out) {
 
     auto a_contiguous = a.contiguous();
 
-    const scalar_t *a_ptr = a_contiguous.data_ptr<scalar_t>();
-    scalar_t *out_ptr = padded_out.data_ptr<scalar_t>();
+    const scalar_t *a_ptr = a_contiguous.const_data_ptr<scalar_t>();
+    scalar_t *out_ptr = padded_out.mutable_data_ptr<scalar_t>();
 
     at::parallel_for(0, B, 1, [&](int64_t start, int64_t end) {
         for (auto b = start; b < end; b++) {
@@ -142,11 +161,11 @@ at::Tensor lpc_cpu(const at::Tensor &x, const at::Tensor &a,
 }
 
 TORCH_LIBRARY(torchlpc, m) {
-    m.def("torchlpc::scan_cpu(Tensor a, Tensor b, Tensor c) -> Tensor");
-    m.def("torchlpc::lpc_cpu(Tensor a, Tensor b, Tensor c) -> Tensor");
+    m.def("torchlpc::scan(Tensor a, Tensor b, Tensor c) -> Tensor");
+    m.def("torchlpc::lpc(Tensor a, Tensor b, Tensor c) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(torchlpc, CPU, m) {
-    m.impl("scan_cpu", &scan_cpu_wrapper);
-    m.impl("lpc_cpu", &lpc_cpu);
+    m.impl("scan", &scan_cpu_wrapper);
+    m.impl("lpc", &lpc_cpu);
 }

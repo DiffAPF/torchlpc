@@ -1,8 +1,15 @@
 import setuptools
+import os
+import glob
 import torch
-from torch.utils import cpp_extension
+from torch.utils.cpp_extension import (
+    CppExtension,
+    CUDAExtension,
+    BuildExtension,
+    CUDA_HOME,
+)
 
-NAME = "torchlpc"
+library_name = "torchlpc"
 VERSION = "0.7.dev"
 MAINTAINER = "Chin-Yun Yu"
 EMAIL = "chin-yun.yu@qmul.ac.uk"
@@ -12,15 +19,48 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-extra_link_args = []
-extra_compile_args = {}
-# check if openmp is available
-if torch.backends.openmp.is_available():
-    extra_compile_args["cxx"] = ["-fopenmp"]
-    extra_link_args.append("-fopenmp")
+# if torch.__version__ >= "2.6.0":
+#     py_limited_api = True
+# else:
+py_limited_api = False
+
+
+def get_extensions():
+    use_cuda = torch.cuda.is_available() and CUDA_HOME is not None
+    use_openmp = torch.backends.openmp.is_available()
+    extension = CUDAExtension if use_cuda else CppExtension
+
+    extra_link_args = []
+    extra_compile_args = {}
+    if use_openmp:
+        extra_compile_args["cxx"] = ["-fopenmp"]
+        extra_link_args.append("-fopenmp")
+
+    this_dir = os.path.abspath(os.path.dirname(__file__))
+    extensions_dir = os.path.join(this_dir, library_name, "csrc")
+    sources = list(glob.glob(os.path.join(extensions_dir, "*.cpp")))
+
+    extensions_cuda_dir = os.path.join(extensions_dir, "cuda")
+    cuda_sources = list(glob.glob(os.path.join(extensions_cuda_dir, "*.cu")))
+
+    if use_cuda:
+        sources += cuda_sources
+
+    ext_modules = [
+        extension(
+            f"{library_name}._C",
+            sources,
+            extra_compile_args=extra_compile_args,
+            extra_link_args=extra_link_args,
+            py_limited_api=py_limited_api,
+        )
+    ]
+
+    return ext_modules
+
 
 setuptools.setup(
-    name=NAME,
+    name=library_name,
     version=VERSION,
     author=MAINTAINER,
     author_email=EMAIL,
@@ -32,16 +72,10 @@ setuptools.setup(
     install_requires=["torch>=2.0", "numpy", "numba"],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    ext_modules=[
-        cpp_extension.CppExtension(
-            "torchlpc._C",
-            ["torchlpc/csrc/scan_cpu.cpp"],
-            extra_compile_args=extra_compile_args,
-            extra_link_args=extra_link_args,
-        )
-    ],
-    cmdclass={"build_ext": cpp_extension.BuildExtension},
+    license="MIT",
+    ext_modules=get_extensions(),
+    cmdclass={"build_ext": BuildExtension},
+    options={"bdist_wheel": {"py_limited_api": "cp39"}} if py_limited_api else {},
 )
