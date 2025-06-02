@@ -45,6 +45,8 @@ jobs:
       if: matrix.os == 'macos-13'
       run: |
         export CXX=$(brew --prefix llvm@15)/bin/clang++
+        export LDFLAGS="-L/usr/local/opt/libomp/lib"
+        export CPPFLAGS="-I/usr/local/opt/libomp/include"
         python setup.py build
         find build/ -name "_C*.so" -exec cp {} ./torchlpc/ \;
     - name: Build CPP extension with g++
