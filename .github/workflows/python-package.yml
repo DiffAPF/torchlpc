@@ -52,13 +52,11 @@ jobs:
         export CXX=$(brew --prefix llvm@15)/bin/clang++
         export LDFLAGS="-L/usr/local/opt/libomp/lib"
         export CPPFLAGS="-I/usr/local/opt/libomp/include"
-        python setup.py build
-        find build/ -name "_C*.so" -exec cp {} ./torchlpc/ \;
+        python -m pip install -e .
     - name: Build CPP extension with g++
       if: matrix.os == 'ubuntu-latest'
       run: |
-        python setup.py build
-        find build/ -name "_C*.so" -exec cp {} ./torchlpc/ \;
+        python -m pip install -e .
     - name: Test with pytest
       run: |
         pytest
