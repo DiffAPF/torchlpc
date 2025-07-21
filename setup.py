@@ -45,6 +45,7 @@ def get_extensions():
 
     if use_cuda:
         sources += cuda_sources
+        extra_compile_args["nvcc"] = ["--extended-lambda"]
 
     ext_modules = [
         extension(
