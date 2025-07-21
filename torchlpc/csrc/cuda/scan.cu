@@ -52,30 +52,24 @@ template <typename scalar_t>
 void compute_linear_recurrence(const scalar_t *decays, const scalar_t *impulses,
                                const scalar_t *initial_state, scalar_t *out,
                                int n_steps) {
-    thrust::device_vector<cuda::std::pair<scalar_t, scalar_t>> input_states(
-        n_steps);
-    thrust::device_vector<cuda::std::pair<scalar_t, scalar_t>> output_states(
-        n_steps);
+    thrust::device_vector<cuda::std::pair<scalar_t, scalar_t>> pairs(n_steps);
 
     // Initialize input_states and output_states
-    thrust::transform(thrust::device, decays, decays + n_steps, impulses,
-                      input_states.begin(),
-                      [=] __host__ __device__(const scalar_t &decay,
-                                              const scalar_t &impulse) {
-                          return cuda::std::make_pair(decay, impulse);
-                      });
+    thrust::transform(
+        thrust::device, decays, decays + n_steps, impulses, pairs.begin(),
+        [] __host__ __device__(const scalar_t &decay, const scalar_t &impulse) {
+            return cuda::std::make_pair(decay, impulse);
+        });
 
     // auto initial_state_pair = cuda::std::make_pair(0.0, initial_state[0]);
 
     recur_binary_op<scalar_t> binary_op;
 
-    thrust::inclusive_scan(thrust::device, input_states.begin(),
-                           input_states.end(), output_states.begin(),
-                           binary_op);
+    thrust::inclusive_scan(thrust::device, pairs.begin(), pairs.end(),
+                           pairs.begin(), binary_op);
 
-    thrust::transform(thrust::device, output_states.begin(),
-                      output_states.end(), out,
-                      [=] __host__ __device__(
+    thrust::transform(thrust::device, pairs.begin(), pairs.end(), out,
+                      [] __host__ __device__(
                           const cuda::std::pair<scalar_t, scalar_t> &state) {
                           // state
                           return state.second;
