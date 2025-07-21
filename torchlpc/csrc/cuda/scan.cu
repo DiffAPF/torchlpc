@@ -50,8 +50,7 @@ struct recur_binary_op {
 
 template <typename scalar_t>
 void compute_linear_recurrence(const scalar_t *decays, const scalar_t *impulses,
-                               const scalar_t *initial_state, scalar_t *out,
-                               int n_steps) {
+                               scalar_t *out, int n_steps) {
     thrust::device_vector<cuda::std::pair<scalar_t, scalar_t>> pairs(n_steps);
 
     // Initialize input_states and output_states
@@ -100,7 +99,6 @@ at::Tensor scan_cuda_wrapper(const at::Tensor &input, const at::Tensor &weights,
             compute_linear_recurrence<scalar_t>(
                 weights_contiguous.const_data_ptr<scalar_t>(),
                 input_contiguous.const_data_ptr<scalar_t>(),
-                initials.const_data_ptr<scalar_t>(),
                 output.mutable_data_ptr<scalar_t>(), input_contiguous.numel());
         });
     return output.slice(1, 1, output.size(1))
