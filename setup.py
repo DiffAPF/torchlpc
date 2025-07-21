@@ -10,7 +10,7 @@ from torch.utils.cpp_extension import (
 )
 
 library_name = "torchlpc"
-VERSION = "0.7.2"
+VERSION = "0.8dev"
 MAINTAINER = "Chin-Yun Yu"
 EMAIL = "chin-yun.yu@qmul.ac.uk"
 
