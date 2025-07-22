@@ -12,39 +12,23 @@
 #include <torch/script.h>
 #include <torch/torch.h>
 
-// template <typename T>
-// using scan_matrix = thrust::device_vector<
-//     cuda::std::pair<thrust::device_vector<T>, thrust::device_vector<T>>>;
-
-// template <typename T>
-// cuda::std::pair<thrust::device_vector<T>, thrust::device_vector<T>>
-// recur_binary_op(const cuda::std::pair<thrust::device_vector<T>,
-//                                       thrust::device_vector<T>> &a,
-//                 const cuda::std::pair<thrust::device_vector<T>,
-//                                       thrust::device_vector<T>> &b) {
-//     cuda::std::pair<thrust::device_vector<T>, thrust::device_vector<T>>
-//     result; result.first.resize(a.first.size());
-//     result.second.resize(a.second.size());
-
-//     ::cuda::std::multiplies<T> mult_op;
-//     ::cuda::std::plus<T> add_op;
-
-//     thrust::transform(thrust::device, a.first.cbegin(), a.first.cend(),
-//                       b.first.cbegin(), result.first.begin(), mult_op);
-//     thrust::transform(thrust::device, a.first.cbegin(), a.first.cend(),
-//                       b.second.cbegin(), result.second.begin(), mult_op);
-//     thrust::transform(thrust::device, result.second.cbegin(),
-//                       result.second.cend(), a.second.cbegin(),
-//                       result.second.begin(), add_op);
-//     return result;
-// }
-
 template <typename T>
 struct recur_binary_op {
     __host__ __device__ cuda::std::pair<T, T> operator()(
         const cuda::std::pair<T, T> &a, const cuda::std::pair<T, T> &b) const {
         return cuda::std::make_pair(a.first * b.first,
                                     a.second * b.first + b.second);
+    }
+};
+
+template <typename T>
+struct scan_functor {
+    thrust::device_ptr<cuda::std::pair<T, T>> data;
+    int n_steps;
+    __host__ __device__ void operator()(int i) const {
+        thrust::inclusive_scan(thrust::device, data + i * n_steps,
+                               data + (i + 1) * n_steps, data + i * n_steps,
+                               recur_binary_op<T>());
     }
 };
 
@@ -70,7 +54,33 @@ void compute_linear_recurrence(const scalar_t *decays, const scalar_t *impulses,
     thrust::transform(thrust::device, pairs.begin(), pairs.end(), out,
                       [] __host__ __device__(
                           const cuda::std::pair<scalar_t, scalar_t> &state) {
-                          // state
+                          return state.second;
+                      });
+}
+
+template <typename scalar_t>
+void compute_linear_recurrence2(const scalar_t *decays,
+                                const scalar_t *impulses,
+                                // const scalar_t *initials,
+                                scalar_t *out, int n_dims, int n_steps) {
+    thrust::device_vector<cuda::std::pair<scalar_t, scalar_t>> pairs(n_steps *
+                                                                     n_dims);
+    thrust::transform(
+        thrust::device, decays, decays + n_steps * n_dims, impulses,
+        pairs.begin(),
+        [] __host__ __device__(const scalar_t &decay, const scalar_t &impulse) {
+            return cuda::std::make_pair(decay, impulse);
+        });
+
+    recur_binary_op<scalar_t> binary_op;
+    thrust::counting_iterator<int> it(0);
+    scan_functor<scalar_t> scan_op{pairs.data(), n_steps};
+
+    thrust::for_each(thrust::device, it, it + n_dims, scan_op);
+
+    thrust::transform(thrust::device, pairs.begin(), pairs.end(), out,
+                      [] __host__ __device__(
+                          const cuda::std::pair<scalar_t, scalar_t> &state) {
                           return state.second;
                       });
 }
@@ -84,7 +94,6 @@ at::Tensor scan_cuda_wrapper(const at::Tensor &input, const at::Tensor &weights,
     TORCH_CHECK(weights.scalar_type() == input.scalar_type(),
                 "Weights must have the same scalar type as input");
 
-    // auto input_contiguous = input.contiguous();
     auto input_contiguous =
         at::cat({initials.unsqueeze(1), input}, 1).contiguous();
     auto weights_contiguous =
@@ -96,10 +105,17 @@ at::Tensor scan_cuda_wrapper(const at::Tensor &input, const at::Tensor &weights,
 
     AT_DISPATCH_FLOATING_AND_COMPLEX_TYPES(
         input.scalar_type(), "compute_linear_recurrence", [&] {
-            compute_linear_recurrence<scalar_t>(
+            // compute_linear_recurrence<scalar_t>(
+            //     weights_contiguous.const_data_ptr<scalar_t>(),
+            //     input_contiguous.const_data_ptr<scalar_t>(),
+            //     output.mutable_data_ptr<scalar_t>(),
+            //     input_contiguous.numel());
+            compute_linear_recurrence2<scalar_t>(
                 weights_contiguous.const_data_ptr<scalar_t>(),
                 input_contiguous.const_data_ptr<scalar_t>(),
-                output.mutable_data_ptr<scalar_t>(), input_contiguous.numel());
+                // initials.const_data_ptr<scalar_t>(),
+                output.mutable_data_ptr<scalar_t>(), input_contiguous.size(0),
+                input_contiguous.size(1));
         });
     return output.slice(1, 1, output.size(1))
         .contiguous();  // Remove the initial state from the output
