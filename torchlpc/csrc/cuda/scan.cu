@@ -105,17 +105,16 @@ at::Tensor scan_cuda_wrapper(const at::Tensor &input, const at::Tensor &weights,
 
     AT_DISPATCH_FLOATING_AND_COMPLEX_TYPES(
         input.scalar_type(), "compute_linear_recurrence", [&] {
-            // compute_linear_recurrence<scalar_t>(
-            //     weights_contiguous.const_data_ptr<scalar_t>(),
-            //     input_contiguous.const_data_ptr<scalar_t>(),
-            //     output.mutable_data_ptr<scalar_t>(),
-            //     input_contiguous.numel());
-            compute_linear_recurrence2<scalar_t>(
+            compute_linear_recurrence<scalar_t>(
                 weights_contiguous.const_data_ptr<scalar_t>(),
                 input_contiguous.const_data_ptr<scalar_t>(),
-                // initials.const_data_ptr<scalar_t>(),
-                output.mutable_data_ptr<scalar_t>(), input_contiguous.size(0),
-                input_contiguous.size(1));
+                output.mutable_data_ptr<scalar_t>(), input_contiguous.numel());
+            // compute_linear_recurrence2<scalar_t>(
+            //     weights_contiguous.const_data_ptr<scalar_t>(),
+            //     input_contiguous.const_data_ptr<scalar_t>(),
+            //     // initials.const_data_ptr<scalar_t>(),
+            //     output.mutable_data_ptr<scalar_t>(),
+            //     input_contiguous.size(0), input_contiguous.size(1));
         });
     return output.slice(1, 1, output.size(1))
         .contiguous();  // Remove the initial state from the output
