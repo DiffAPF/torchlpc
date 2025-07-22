@@ -3,6 +3,7 @@
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <execution>
 #include <utility>
 #include <vector>
 
@@ -58,15 +59,16 @@ void scan_cpu(const at::Tensor &input, const at::Tensor &weights,
     const scalar_t *weights_ptr = weights_contiguous.const_data_ptr<scalar_t>();
     scalar_t *output_ptr = output.mutable_data_ptr<scalar_t>();
 
-    std::transform(weights_ptr, weights_ptr + total_size, input_ptr, buffer,
-                   [](const scalar_t &a, const scalar_t &b) {
+    std::transform(std::execution::par, weights_ptr, weights_ptr + total_size,
+                   input_ptr, buffer, [](const scalar_t &a, const scalar_t &b) {
                        return std::make_pair(a, b);
                    });
 
     at::parallel_for(0, n_batch, 1, [&](int64_t start, int64_t end) {
         for (auto b = start; b < end; b++) {
             std::inclusive_scan(
-                buffer + b * T, buffer + (b + 1) * T, buffer + b * T,
+                std::execution::par, buffer + b * T, buffer + (b + 1) * T,
+                buffer + b * T,
                 [](const std::pair<scalar_t, scalar_t> &a,
                    const std::pair<scalar_t, scalar_t> &b) {
                     return std::make_pair(a.first * b.first,
@@ -77,7 +79,7 @@ void scan_cpu(const at::Tensor &input, const at::Tensor &weights,
     });
 
     std::transform(
-        buffer, buffer + total_size, output_ptr,
+        std::execution::par, buffer, buffer + total_size, output_ptr,
         [](const std::pair<scalar_t, scalar_t> &a) { return a.second; });
 }
 
