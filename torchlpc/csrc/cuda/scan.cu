@@ -5,6 +5,7 @@
 #include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/execution_policy.h>
+#include <thrust/for_each.h>
 #include <thrust/functional.h>
 #include <thrust/iterator/transform_output_iterator.h>
 #include <thrust/pair.h>
@@ -28,14 +29,6 @@ struct recur_binary_op {
 };
 
 template <typename T>
-struct input_unary_op {
-    __host__ __device__ cuda::std::pair<T, T> operator()(
-        const T &decay, const T &impulse) const {
-        return cuda::std::make_pair(decay, impulse);
-    }
-};
-
-template <typename T>
 struct output_unary_op {
     __host__ __device__ T
     operator()(const cuda::std::tuple<T, T> &state) const {
@@ -43,54 +36,38 @@ struct output_unary_op {
     }
 };
 
-template <typename T>
-struct scan_functor {
-    thrust::device_ptr<cuda::std::pair<T, T>> data;
-    int n_steps;
-    __host__ __device__ void operator()(int i) const {
-        thrust::inclusive_scan(thrust::device, data + i * n_steps,
-                               data + (i + 1) * n_steps, data + i * n_steps,
-                               recur_binary_op<T>());
-    }
-};
-
 template <typename scalar_t>
-void compute_linear_recurrence(const scalar_t *decays, const scalar_t *impulses,
-                               scalar_t *out, int n_steps) {
+__host__ __device__ void compute_linear_recurrence(const scalar_t *decays,
+                                                   const scalar_t *impulses,
+                                                   scalar_t *out, int n_steps) {
     thrust::inclusive_scan(
         thrust::device, thrust::make_zip_iterator(decays, impulses),
         thrust::make_zip_iterator(decays + n_steps, impulses + n_steps),
         thrust::make_transform_output_iterator(out,
-                                               // thrust::get<1>),
                                                output_unary_op<scalar_t>()),
         recur_binary_op<scalar_t>());
 }
+
+template <typename T>
+struct scan_functor {
+    const T *decays, *impulses;
+    T *out;
+    int n_steps;
+    __host__ __device__ void operator()(int i) {
+        compute_linear_recurrence<T>(decays + i * n_steps,
+                                     impulses + i * n_steps, out + i * n_steps,
+                                     n_steps);
+    }
+};
 
 template <typename scalar_t>
 void compute_linear_recurrence2(const scalar_t *decays,
                                 const scalar_t *impulses,
                                 // const scalar_t *initials,
                                 scalar_t *out, int n_dims, int n_steps) {
-    thrust::device_vector<cuda::std::pair<scalar_t, scalar_t>> pairs(n_steps *
-                                                                     n_dims);
-    thrust::transform(
-        thrust::device, decays, decays + n_steps * n_dims, impulses,
-        pairs.begin(),
-        [] __host__ __device__(const scalar_t &decay, const scalar_t &impulse) {
-            return cuda::std::make_pair(decay, impulse);
-        });
-
-    recur_binary_op<scalar_t> binary_op;
     thrust::counting_iterator<int> it(0);
-    scan_functor<scalar_t> scan_op{pairs.data(), n_steps};
-
+    scan_functor<scalar_t> scan_op{decays, impulses, out, n_steps};
     thrust::for_each(thrust::device, it, it + n_dims, scan_op);
-
-    thrust::transform(thrust::device, pairs.begin(), pairs.end(), out,
-                      [] __host__ __device__(
-                          const cuda::std::pair<scalar_t, scalar_t> &state) {
-                          return state.second;
-                      });
 }
 
 at::Tensor scan_cuda_wrapper(const at::Tensor &input, const at::Tensor &weights,
