@@ -46,7 +46,7 @@ jobs:
 
   build-macos:
     if: github.event_name == 'pull_request'
-    runs-on: macos-latest
+    runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
@@ -74,7 +74,7 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Build CPP extension with clang++
       run: |
-        export CXX=$(brew --prefix llvm@15)/bin/clang++
+        export CXX=$(brew --prefix llvm@18)/bin/clang++
         export LDFLAGS="-L/usr/local/opt/libomp/lib"
         export CPPFLAGS="-I/usr/local/opt/libomp/include"
         python -m pip install -e .
