@@ -22,7 +22,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build "setuptools-git-versioning>=2,<3" numpy
+        pip install build "setuptools-git-versioning>=2,<3" numpy numba
         pip install torch --index-url https://download.pytorch.org/whl/cpu
     - name: Display version
       run: |
