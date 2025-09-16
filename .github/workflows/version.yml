@@ -1,10 +1,6 @@
 name: Display version
 
-on:
-  push:
-    branches: [ "dev", "main", "alpha", "beta" ]
-  pull_request:
-    branches: [ "dev", "main", "alpha", "beta" ]
+on: [push, pull_request]
 
 permissions:
     contents: read
