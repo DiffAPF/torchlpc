@@ -1,3 +1,72 @@
 [build-system]
-requires = ["setuptools", "torch", "numpy"]
+requires = [
+    "setuptools >= 77.0.3",
+    "setuptools-git-versioning>=2.0,<3",
+    "wheel",
+    "torch",
+    "numpy",
+]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools-git-versioning]
+enabled = true
+# change the file path
+version_file = "torchlpc/VERSION.txt"
+count_commits_from_version_file = true                    # <--- enable commits tracking
+dev_template = "{tag}.{branch}{ccount}"                   # suffix for versions will be .dev
+dirty_template = "{tag}.{branch}{ccount}"                 # same thing here
+branch_formatter = "torchlpc._version:format_branch_name"
+
+[tool.setuptools.package-data]
+# include VERSION file to a package
+torchlpc = ["VERSION"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests", "tests.*"]
+
+[tool.setuptools]
+# this package will read some included files in runtime, avoid installing it as .zip
+zip-safe = false
+
+[project]
+dynamic = ["version"]
+name = "torchlpc"
+dependencies = ["torch >= 2.0.0", "numpy", "numba"]
+requires-python = ">=3.9"
+authors = [{ name = "Chin-Yun Yu", email = "chin-yun.yu@qmul.ac.uk" }]
+maintainers = [{ name = "Chin-Yun Yu", email = "chin-yun.yu@qmul.ac.uk" }]
+description = "Fast, efficient, and differentiable time-varying LPC filtering in PyTorch."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest >= 6.0", "scipy", "numpy", "pytest-cov"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--tb=short",
+    "--strict-markers",
+    "--cov=torchlpc",
+    "--cov-report=term-missing:skip-covered",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
