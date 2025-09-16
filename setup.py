@@ -42,7 +42,8 @@ def get_extensions():
     ext_modules = [
         extension(
             f"{library_name}._C",
-            sources,
+            # sources,
+            [os.path.relpath(s, this_dir) for s in sources],
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,
             py_limited_api=py_limited_api,
