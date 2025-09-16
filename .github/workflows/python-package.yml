@@ -20,29 +20,30 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
+        cache: "pip"
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         python -m pip install flake8 pytest
-        pip install "numpy<2.0" numba
     - name: Install torch
-      run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      run: |
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install -e . [dev]
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Build CPP extension with g++
-      run: |
-        python -m pip install -e .
     - name: Test with pytest
       run: |
-        pytest
+        pytes
 
   build-macos:
     if: github.event_name == 'pull_request'
@@ -54,10 +55,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
+        cache: "pip"
     - name: Install libomp
       run: |
         brew install libomp
@@ -65,7 +69,6 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install flake8 pytest
-        pip install "numpy<2.0" numba torch
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
@@ -77,7 +80,7 @@ jobs:
         export CXX=$(brew --prefix llvm@15)/bin/clang++
         export LDFLAGS="-L/usr/local/opt/libomp/lib"
         export CPPFLAGS="-I/usr/local/opt/libomp/include"
-        python -m pip install -e .
+        pip install -e . [dev]
     - name: Test with pytest
       run: |
         pytest
