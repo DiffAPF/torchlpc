@@ -103,24 +103,22 @@ void lpc_cpu_core(const torch::Tensor &a, const torch::Tensor &padded_out)
     const scalar_t *a_ptr = a_contiguous.const_data_ptr<scalar_t>();
     scalar_t *out_ptr = padded_out.mutable_data_ptr<scalar_t>();
 
-// at::parallel_for(0, B, 1, [&](int64_t start, int64_t end)
-//                  {
-#pragma omp parallel for
-    for (auto b = 0; b < B; b++)
-    {
-        auto out_offset = b * (T + order) + order;
-        auto a_offset = b * T * order;
-        for (int64_t t = 0; t < T; t++)
+    at::parallel_for(0, B, 1, [&](int64_t start, int64_t end)
+                     {
+        for (auto b = start; b < end; b++)
         {
-            scalar_t y = out_ptr[out_offset + t];
-            for (int64_t i = 0; i < order; i++)
+            auto out_offset = out_ptr + b * (T + order) + order;
+            auto a_offset = a_ptr + b * T * order;
+            for (int64_t t = 0; t < T; t++)
             {
-                y -= a_ptr[a_offset + t * order + i] *
-                     out_ptr[out_offset + t - i - 1];
+                scalar_t y = out_offset[t];
+                for (int64_t i = 0; i < order; i++)
+                {
+                    y -= a_offset[t * order + i] * out_offset [t - i - 1];
+                }
+                out_offset[t] = y;
             }
-            out_ptr[out_offset + t] = y;
-        }
-    };
+        }; });
 }
 
 at::Tensor scan_cpu_wrapper(const at::Tensor &input, const at::Tensor &weights,
