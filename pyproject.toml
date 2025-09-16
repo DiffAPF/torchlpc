@@ -12,10 +12,11 @@ build-backend = "setuptools.build_meta"
 enabled = true
 # change the file path
 version_file = "torchlpc/VERSION.txt"
-count_commits_from_version_file = true                    # <--- enable commits tracking
-dev_template = "{tag}.{branch}{ccount}"                   # suffix for versions will be .dev
-dirty_template = "{tag}.{branch}{ccount}"                 # same thing here
-branch_formatter = "torchlpc._version:format_branch_name"
+count_commits_from_version_file = true    # <--- enable commits tracking
+dev_template = "{tag}.{branch}{ccount}"   # suffix for versions will be .dev
+dirty_template = "{tag}.{branch}{ccount}" # same thing here
+# Temporarily disable branch formatting due to issues with regex in _version.py
+# branch_formatter = "torchlpc._version:format_branch_name"
 
 [tool.setuptools.package-data]
 # include VERSION file to a package
