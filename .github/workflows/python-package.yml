@@ -78,8 +78,8 @@ jobs:
     - name: Build CPP extension with clang++
       run: |
         export CXX=$(brew --prefix llvm@18)/bin/clang++
-        export LDFLAGS="-L/usr/local/opt/libomp/lib"
-        export CPPFLAGS="-I/usr/local/opt/libomp/include"
+        export LDFLAGS="-L/opt/homebrew/opt/libomp/lib"
+        export CPPFLAGS="-I/opt/homebrew/opt/libomp/include"
         pip install -e .[dev]
     - name: Test with pytest
       run: |
