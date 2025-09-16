@@ -29,8 +29,7 @@ def get_extensions():
         extra_compile_args["cxx"] = ["-fopenmp"]
         extra_link_args.append("-fopenmp")
 
-    this_dir = os.path.abspath(os.path.dirname(__file__))
-    extensions_dir = os.path.join(this_dir, library_name, "csrc")
+    extensions_dir = os.path.join(library_name, "csrc")
     sources = list(glob.glob(os.path.join(extensions_dir, "*.cpp")))
 
     extensions_cuda_dir = os.path.join(extensions_dir, "cuda")
@@ -42,8 +41,7 @@ def get_extensions():
     ext_modules = [
         extension(
             f"{library_name}._C",
-            # sources,
-            [os.path.relpath(s, this_dir) for s in sources],
+            sources,
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,
             py_limited_api=py_limited_api,
