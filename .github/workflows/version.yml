@@ -1,10 +1,6 @@
 name: Display version
 
-on:
-  push:
-    branches: [ "dev", "main", "alpha", "beta" ]
-  pull_request:
-    branches: [ "dev", "main", "alpha", "beta" ]
+on: [push, pull_request]
 
 permissions:
     contents: read
@@ -26,8 +22,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build "setuptools-git-versioning>=2,<3"
+        pip install build "setuptools-git-versioning>=2,<3" numpy numba
         pip install torch --index-url https://download.pytorch.org/whl/cpu
     - name: Display version
       run: |
-          setuptools-git-versioning -v >> $GITHUB_STEP_SUMMARY
+          setuptools-git-versioning -vv >> $GITHUB_STEP_SUMMARY

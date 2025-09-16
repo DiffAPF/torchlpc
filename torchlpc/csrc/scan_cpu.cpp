@@ -6,26 +6,29 @@
 #include <utility>
 #include <vector>
 
-extern "C" {
-/* Creates a dummy empty _C module that can be imported from Python.
-   The import from Python will load the .so associated with this extension
-   built from this file, so that all the TORCH_LIBRARY calls below are run.*/
-PyObject *PyInit__C(void) {
-    static struct PyModuleDef module_def = {
-        PyModuleDef_HEAD_INIT,
-        "_C", /* name of module */
-        NULL, /* module documentation, may be NULL */
-        -1,   /* size of per-interpreter state of the module,
-                 or -1 if the module keeps state in global variables. */
-        NULL, /* methods */
-    };
-    return PyModule_Create(&module_def);
-}
+extern "C"
+{
+    /* Creates a dummy empty _C module that can be imported from Python.
+       The import from Python will load the .so associated with this extension
+       built from this file, so that all the TORCH_LIBRARY calls below are run.*/
+    PyObject *PyInit__C(void)
+    {
+        static struct PyModuleDef module_def = {
+            PyModuleDef_HEAD_INIT,
+            "_C", /* name of module */
+            NULL, /* module documentation, may be NULL */
+            -1,   /* size of per-interpreter state of the module,
+                     or -1 if the module keeps state in global variables. */
+            NULL, /* methods */
+        };
+        return PyModule_Create(&module_def);
+    }
 }
 
 template <typename scalar_t>
 void scan_cpu(const at::Tensor &input, const at::Tensor &weights,
-              const at::Tensor &initials, const at::Tensor &output) {
+              const at::Tensor &initials, const at::Tensor &output)
+{
     TORCH_CHECK(input.dim() == 2, "Input must be 2D");
     TORCH_CHECK(initials.dim() == 1, "Initials must be 1D");
     TORCH_CHECK(weights.sizes() == input.sizes(),
@@ -50,39 +53,33 @@ void scan_cpu(const at::Tensor &input, const at::Tensor &weights,
     auto T = input.size(1);
     auto total_size = input.numel();
 
-    std::pair<scalar_t, scalar_t> buffer[total_size];
-
     const scalar_t *input_ptr = input_contiguous.const_data_ptr<scalar_t>();
     const scalar_t *initials_ptr =
         initials_contiguous.const_data_ptr<scalar_t>();
     const scalar_t *weights_ptr = weights_contiguous.const_data_ptr<scalar_t>();
     scalar_t *output_ptr = output.mutable_data_ptr<scalar_t>();
 
-    std::transform(weights_ptr, weights_ptr + total_size, input_ptr, buffer,
-                   [](const scalar_t &a, const scalar_t &b) {
-                       return std::make_pair(a, b);
-                   });
-
-    at::parallel_for(0, n_batch, 1, [&](int64_t start, int64_t end) {
-        for (auto b = start; b < end; b++) {
-            std::inclusive_scan(
-                buffer + b * T, buffer + (b + 1) * T, buffer + b * T,
-                [](const std::pair<scalar_t, scalar_t> &a,
-                   const std::pair<scalar_t, scalar_t> &b) {
-                    return std::make_pair(a.first * b.first,
-                                          a.second * b.first + b.second);
-                },
-                std::make_pair((scalar_t)1.0, initials_ptr[b]));
-        }
-    });
-
-    std::transform(
-        buffer, buffer + total_size, output_ptr,
-        [](const std::pair<scalar_t, scalar_t> &a) { return a.second; });
+    at::parallel_for(0, n_batch, 1, [&](int64_t start, int64_t end)
+                     {
+        for (auto b = start; b < end; b++)
+        {
+            auto initial = initials_ptr[b];
+            auto weights_offset = weights_ptr + b * T;
+            auto input_offset = input_ptr + b * T;
+            auto output_offset = output_ptr + b * T;
+            for (int64_t t = 0; t < T; t++)
+            {
+                auto w = weights_offset[t];
+                auto x = input_offset[t];
+                initial = initial * w + x;
+                output_offset[t] = initial;
+            }
+        }; });
 }
 
 template <typename scalar_t>
-void lpc_cpu_core(const torch::Tensor &a, const torch::Tensor &padded_out) {
+void lpc_cpu_core(const torch::Tensor &a, const torch::Tensor &padded_out)
+{
     // Ensure input dimensions are correct
     TORCH_CHECK(a.dim() == 3, "a must be 3-dimensional");
     TORCH_CHECK(padded_out.dim() == 2, "out must be 2-dimensional");
@@ -106,24 +103,27 @@ void lpc_cpu_core(const torch::Tensor &a, const torch::Tensor &padded_out) {
     const scalar_t *a_ptr = a_contiguous.const_data_ptr<scalar_t>();
     scalar_t *out_ptr = padded_out.mutable_data_ptr<scalar_t>();
 
-    at::parallel_for(0, B, 1, [&](int64_t start, int64_t end) {
-        for (auto b = start; b < end; b++) {
-            auto out_offset = b * (T + order) + order;
-            auto a_offset = b * T * order;
-            for (int64_t t = 0; t < T; t++) {
-                scalar_t y = out_ptr[out_offset + t];
-                for (int64_t i = 0; i < order; i++) {
-                    y -= a_ptr[a_offset + t * order + i] *
-                         out_ptr[out_offset + t - i - 1];
+    at::parallel_for(0, B, 1, [&](int64_t start, int64_t end)
+                     {
+        for (auto b = start; b < end; b++)
+        {
+            auto out_offset = out_ptr + b * (T + order) + order;
+            auto a_offset = a_ptr + b * T * order;
+            for (int64_t t = 0; t < T; t++)
+            {
+                scalar_t y = out_offset[t];
+                for (int64_t i = 0; i < order; i++)
+                {
+                    y -= a_offset[t * order + i] * out_offset [t - i - 1];
                 }
-                out_ptr[out_offset + t] = y;
+                out_offset[t] = y;
             }
-        }
-    });
+        }; });
 }
 
 at::Tensor scan_cpu_wrapper(const at::Tensor &input, const at::Tensor &weights,
-                            const at::Tensor &initials) {
+                            const at::Tensor &initials)
+{
     TORCH_CHECK(input.is_floating_point() || input.is_complex(),
                 "Input must be floating point or complex");
     TORCH_CHECK(initials.scalar_type() == input.scalar_type(),
@@ -135,12 +135,14 @@ at::Tensor scan_cpu_wrapper(const at::Tensor &input, const at::Tensor &weights,
 
     AT_DISPATCH_FLOATING_AND_COMPLEX_TYPES(
         input.scalar_type(), "scan_cpu",
-        [&] { scan_cpu<scalar_t>(input, weights, initials, output); });
+        [&]
+        { scan_cpu<scalar_t>(input, weights, initials, output); });
     return output;
 }
 
 at::Tensor lpc_cpu(const at::Tensor &x, const at::Tensor &a,
-                   const at::Tensor &zi) {
+                   const at::Tensor &zi)
+{
     TORCH_CHECK(x.is_floating_point() || x.is_complex(),
                 "Input must be floating point or complex");
     TORCH_CHECK(a.scalar_type() == x.scalar_type(),
@@ -156,16 +158,19 @@ at::Tensor lpc_cpu(const at::Tensor &x, const at::Tensor &a,
     auto out = at::cat({zi.flip(1), x}, 1).contiguous();
 
     AT_DISPATCH_FLOATING_AND_COMPLEX_TYPES(
-        x.scalar_type(), "lpc_cpu", [&] { lpc_cpu_core<scalar_t>(a, out); });
+        x.scalar_type(), "lpc_cpu", [&]
+        { lpc_cpu_core<scalar_t>(a, out); });
     return out.slice(1, zi.size(1), out.size(1)).contiguous();
 }
 
-TORCH_LIBRARY(torchlpc, m) {
+TORCH_LIBRARY(torchlpc, m)
+{
     m.def("torchlpc::scan(Tensor a, Tensor b, Tensor c) -> Tensor");
     m.def("torchlpc::lpc(Tensor a, Tensor b, Tensor c) -> Tensor");
 }
 
-TORCH_LIBRARY_IMPL(torchlpc, CPU, m) {
+TORCH_LIBRARY_IMPL(torchlpc, CPU, m)
+{
     m.impl("scan", &scan_cpu_wrapper);
     m.impl("lpc", &lpc_cpu);
 }
