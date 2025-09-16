@@ -4,6 +4,3 @@ recursive-include torchlpc *.cpp
 recursive-include torchlpc *.c
 recursive-include torchlpc *.cu
 recursive-include torchlpc *.txt
-recursive-include tests *.py
-recursive-exclude * __pycache__
-recursive-exclude * *.pyc
