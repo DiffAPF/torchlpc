@@ -6,7 +6,7 @@ requires = [
     "torch",
     "numpy",
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "setuptools.build_meta:__legacy__"
 
 [tool.setuptools-git-versioning]
 enabled = true
@@ -16,7 +16,7 @@ count_commits_from_version_file = true    # <--- enable commits tracking
 dev_template = "{tag}.{branch}{ccount}"   # suffix for versions will be .dev
 dirty_template = "{tag}.{branch}{ccount}" # same thing here
 # Temporarily disable branch formatting due to issues with regex in _version.py
-# branch_formatter = "torchlpc._version:format_branch_name"
+branch_formatter = "torchlpc._version:format_branch_name"
 
 [tool.setuptools.package-data]
 # include VERSION file to a package
