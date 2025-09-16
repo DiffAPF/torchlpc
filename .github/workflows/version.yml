@@ -26,4 +26,4 @@ jobs:
         pip install torch --index-url https://download.pytorch.org/whl/cpu
     - name: Display version
       run: |
-          setuptools-git-versioning -v >> $GITHUB_STEP_SUMMARY
+          setuptools-git-versioning -vv >> $GITHUB_STEP_SUMMARY
