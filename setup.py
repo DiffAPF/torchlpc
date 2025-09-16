@@ -10,13 +10,6 @@ from torch.utils.cpp_extension import (
 )
 
 library_name = "torchlpc"
-VERSION = "0.8dev"
-MAINTAINER = "Chin-Yun Yu"
-EMAIL = "chin-yun.yu@qmul.ac.uk"
-
-
-with open("README.md", "r") as fh:
-    long_description = fh.read()
 
 
 # if torch.__version__ >= "2.6.0":
@@ -60,22 +53,6 @@ def get_extensions():
 
 
 setuptools.setup(
-    name=library_name,
-    version=VERSION,
-    author=MAINTAINER,
-    author_email=EMAIL,
-    description="Fast, efficient, and differentiable time-varying LPC filtering in PyTorch.",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/DiffAPF/torchlpc",
-    packages=["torchlpc"],
-    install_requires=["torch>=2.0", "numpy", "numba"],
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "Operating System :: MacOS :: MacOS X",
-        "Operating System :: POSIX",
-    ],
-    license="MIT",
     ext_modules=get_extensions(),
     cmdclass={"build_ext": BuildExtension},
     options={"bdist_wheel": {"py_limited_api": "cp39"}} if py_limited_api else {},
